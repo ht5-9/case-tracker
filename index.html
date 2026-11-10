@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Case Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚖️</text></svg>">
+<!--
+  iPad version of the Case Tracker. Reads and writes the SAME cases.json in
+  your Google Drive (CaseTracker folder) that the Mac app uses, directly
+  from Safari - no server, nothing stored on the iPad. Case data is kept
+  only in this page's memory while it is open.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff; --text: #262730; --muted: #6b6f7b; --line: #e3e5ea; --soft: #f5f6f8;
+    --primary: #ff4b4b; --primary-dark: #d93a3a;
+    --err-bg: #fdecec; --err-text: #7d1f1f;
+    --warn-bg: #fff6dc; --warn-text: #7a5300;
+    --ok-bg: #e5f6ea; --ok-text: #1d6136;
+    --info-bg: #e8f1fd; --info-text: #1f4e8c;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 16px 16px 96px; }
+  h1 { font-size: 1.9rem; margin: 8px 0 4px; }
+  h2 { font-size: 1.35rem; margin: 8px 0 8px; }
+  h3 { font-size: 1.05rem; margin: 18px 0 4px; }
+  .caption { color: var(--muted); font-size: .88rem; margin: 2px 0 10px; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+  .topbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .status-line { color: var(--muted); font-size: .85rem; }
+  button, .btn { font: inherit; font-size: .95rem; border: 1px solid #c9ccd3; background: #fff; color: var(--text);
+    border-radius: 8px; padding: 8px 14px; cursor: pointer; min-height: 40px; }
+  button:active { background: var(--soft); }
+  button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  button.primary:active { background: var(--primary-dark); }
+  button.small { min-height: 32px; padding: 4px 10px; font-size: .85rem; }
+  button.link { border: 0; background: none; color: var(--info-text); padding: 4px 6px; min-height: 0; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .alert { border-radius: 8px; padding: 12px 14px; margin: 10px 0; }
+  .alert ul { margin: 6px 0 0; padding-left: 20px; }
+  .alert.error { background: var(--err-bg); color: var(--err-text); }
+  .alert.warning { background: var(--warn-bg); color: var(--warn-text); }
+  .alert.success { background: var(--ok-bg); color: var(--ok-text); }
+  .alert.info { background: var(--info-bg); color: var(--info-text); }
+  details { border: 1px solid var(--line); border-radius: 8px; margin: 10px 0; background: #fff; }
+  details > summary { cursor: pointer; padding: 12px 14px; font-weight: 600; list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--muted); }
+  details[open] > summary::before { content: "▾"; }
+  details > .inner { padding: 0 14px 14px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 12px; }
+  .tabs button.active { border-bottom-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid rgba(0,0,0,.08); }
+  th { background: var(--soft); font-weight: 600; white-space: nowrap; }
+  td.wide { min-width: 240px; }
+  td.mid { min-width: 150px; }
+  label { display: block; font-size: .88rem; margin: 10px 0 4px; }
+  input[type=text], input[type=number], input[type=date], textarea, select {
+    font: inherit; font-size: 16px; width: 100%; padding: 8px 10px; border: 1px solid #c9ccd3; border-radius: 8px; background: #fff; color: var(--text); }
+  textarea { min-height: 80px; resize: vertical; }
+  input[type=date] { min-height: 42px; }
+  .check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: .92rem; }
+  .check input { width: 22px; height: 22px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  .item { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 10px; margin: 8px 0; background: #fcfcfd; }
+  .item-grid { display: grid; gap: 0 10px; align-items: end; }
+  .item-grid.ms { grid-template-columns: 2fr 1.2fr auto; }
+  .item-grid.up { grid-template-columns: 1fr 3fr; }
+  .item-grid.fu { grid-template-columns: 1.1fr 2.2fr 1.1fr; }
+  @media (max-width: 640px) { .item-grid.ms, .item-grid.up, .item-grid.fu { grid-template-columns: 1fr; } }
+  .item-foot { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; justify-content: space-between; }
+  .item-foot .check { margin: 6px 0 0; }
+  .unsaved-bar { position: fixed; left: 0; right: 0; bottom: 0; background: #262730; color: #fff; padding: 10px 16px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom)); display: none; align-items: center; justify-content: space-between; gap: 10px; z-index: 10; }
+  .unsaved-bar.show { display: flex; }
+  .unsaved-bar span { font-size: .9rem; }
+  .toast { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); max-width: min(92vw, 640px); z-index: 20;
+    box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+  .busy { position: fixed; top: 12px; right: 12px; background: #262730; color: #fff; border-radius: 8px; padding: 6px 12px; font-size: .85rem; z-index: 30; }
+  .center { text-align: center; padding: 40px 0; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="unsaved-bar" id="unsavedBar"><span id="unsavedText">Unsaved changes</span><button class="primary" data-act="save-draft">Save Changes</button></div>
+<div id="toastHost"></div>
+<div id="busyHost"></div>
+
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js" defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+'use strict';
+
+/* ------------------------------------------------------------------ */
+/* Constants - mirror alerts.py / data_store.py on the Mac             */
+/* ------------------------------------------------------------------ */
+const CLIENT_ID = (window.GINO_CONFIG || {}).googleClientId || '';
+const SCOPE = 'https://www.googleapis.com/auth/drive';
+const DEMO = new URLSearchParams(location.search).has('demo');
+const FOLDER_NAME = 'CaseTracker';
+const FILE_NAME = 'cases.json';
+const BACKUP_NAME = 'cases_backup.json';
+const DEFAULT_DAYS = 14;
+const PI_LIMITATION_YEARS = 3;
+const STATUSES = ['Active', 'On Hold', 'Closed'];
+const TEMPLATE = [
+  'Letter Before Claim Sent/Received',
+  'Writ / Statement of Claim Filed',
+  'Discovery / Directions Deadline',
+  'Trial / Hearing Date',
+];
+const COLORS = { overdue: '#d9534f', due_soon: '#f0ad4e', upcoming: '#5cb85c', done: '#9e9e9e', no_date: '#9e9e9e', none: '#9e9e9e' };
+const LABELS = { overdue: 'OVERDUE', due_soon: 'DUE SOON', upcoming: 'OK', done: 'Done', no_date: 'No date set', none: 'No pending milestones' };
+
+/* ------------------------------------------------------------------ */
+/* Small helpers                                                       */
+/* ------------------------------------------------------------------ */
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function today() { return isoLocal(new Date()); }
+function toDate(iso) { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); }
+function addDays(iso, n) { const d = toDate(iso); d.setDate(d.getDate() + n); return isoLocal(d); }
+function addYears(iso, n) {
+  // Same as pandas DateOffset(years=n): 29 Feb -> 28 Feb in a non-leap year.
+  const [y, m, d] = iso.split('-').map(Number);
+  const lastDay = new Date(y + n, m, 0).getDate();
+  return isoLocal(new Date(y + n, m - 1, Math.min(d, lastDay)));
+}
+function parseDate(v) {
+  if (!v) return null;
+  const s = String(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+function nowStamp() {
+  const d = new Date();
+  return `${isoLocal(d)}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+function hex(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return Array.from(a, b => b.toString(16).padStart(2, '0')).join('').slice(0, n * 2); }
+const newCaseId = () => 'case_' + hex(4);
+const newMilestoneId = () => 'm_' + hex(3);
+const newUpdateId = () => 'u_' + hex(3);
+const newCorrId = () => 'corr_' + hex(3);
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function isVisible(c) { return c.visible === undefined ? true : !!c.visible; }
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+
+/* ------------------------------------------------------------------ */
+/* Urgency logic - same rules as alerts.py                             */
+/* ------------------------------------------------------------------ */
+function milestoneStatus(m, th) {
+  if (m.done) return 'done';
+  const d = parseDate(m.date);
+  if (!d) return 'no_date';
+  const t = today();
+  if (d < t) return 'overdue';
+  if (d <= addDays(t, th)) return 'due_soon';
+  return 'upcoming';
+}
+function nextPending(items) {
+  const c = items.filter(i => !i.done && parseDate(i.date));
+  c.sort((a, b) => (parseDate(a.date) < parseDate(b.date) ? -1 : parseDate(a.date) > parseDate(b.date) ? 1 : 0));
+  return c[0] || null;
+}
+const caseNextMilestone = c => nextPending(c.milestones || []);
+const caseNextFollowup = c => nextPending((c.correspondence || []).filter(isVisible));
+function caseUrgency(c, th) {
+  const s = (c.milestones || []).filter(m => !m.done).map(m => milestoneStatus(m, th));
+  if (s.includes('overdue')) return 'overdue';
+  if (s.includes('due_soon')) return 'due_soon';
+  if (s.includes('upcoming')) return 'upcoming';
+  return 'none';
+}
+function sortAlerts(list) {
+  list.sort((a, b) => (a.status === b.status ? (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) : a.status === 'overdue' ? -1 : 1));
+  return list;
+}
+function milestoneAlerts(data, th) {
+  const out = [];
+  for (const c of data.cases) for (const m of c.milestones || []) {
+    const s = milestoneStatus(m, th);
+    if (s === 'overdue' || s === 'due_soon') out.push({ case_name: c.case_name, case_reference: c.case_reference, label: m.label, date: parseDate(m.date), status: s });
+  }
+  return sortAlerts(out);
+}
+function followupAlerts(data, th) {
+  const out = [];
+  for (const c of data.cases) for (const f of c.correspondence || []) {
+    if (!isVisible(f)) continue;
+    const s = milestoneStatus(f, th);
+    if (s === 'overdue' || s === 'due_soon') out.push({ case_name: c.case_name, case_reference: c.case_reference, description: f.description, date: parseDate(f.date), status: s });
+  }
+  return sortAlerts(out);
+}
+function nextFollowupSummary(c) {
+  const f = caseNextFollowup(c);
+  if (!f) return '';
+  let t = f.description;
+  if (t.length > 60) t = t.slice(0, 57) + '...';
+  return `${f.date}: ${t}`;
+}
+const milestoneEntries = c => (c.milestones || []).map(m => `${m.label}: ${m.date || 'not set'}`);
+function caseLabel(c) {
+  const prefix = `${c.case_type}${c.firm_reference || ''}`.trim();
+  const label = prefix ? `${prefix} ${c.case_name}` : c.case_name;
+  return `${label} (${c.case_reference || 'no ref'})`;
+}
+const byFirmRef = cases => [...cases].sort((a, b) => ((a.firm_reference || '') < (b.firm_reference || '') ? -1 : (a.firm_reference || '') > (b.firm_reference || '') ? 1 : 0));
+
+/* Same defaults load_cases() fills in on the Mac. */
+function normalize(data) {
+  data.schema_version = data.schema_version || 1;
+  data.settings = data.settings || {};
+  const legacy = data.settings.reminder_threshold_days ?? DEFAULT_DAYS;
+  if (data.settings.milestone_reminder_days == null) data.settings.milestone_reminder_days = legacy;
+  if (data.settings.followup_reminder_days == null) data.settings.followup_reminder_days = legacy;
+  data.cases = data.cases || [];
+  for (const c of data.cases) {
+    if (c.firm_reference == null) c.firm_reference = '';
+    if (c.case_description == null) c.case_description = '';
+    if (c.case_reference == null) c.case_reference = '';
+    if (c.notes == null) c.notes = '';
+    c.milestones = c.milestones || [];
+    c.updates = c.updates || [];
+    c.correspondence = c.correspondence || [];
+    for (const f of c.correspondence) if (f.visible === undefined) f.visible = true;
+  }
+  return data;
+}
+
+/* ------------------------------------------------------------------ */
+/* Google Drive access                                                 */
+/* ------------------------------------------------------------------ */
+class NeedAuth extends Error { constructor() { super('Google sign-in needed'); } }
+const DRIVE = 'https://www.googleapis.com/drive/v3/files';
+const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+
+async function api(url, opts = {}) {
+  if (!S.token || Date.now() > S.tokenExp - 60000) throw new NeedAuth();
+  const r = await fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + S.token, ...(opts.headers || {}) } });
+  if (r.status === 401) { S.token = null; throw new NeedAuth(); }
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).error.message; } catch (e) { /* ignore */ }
+    throw new Error(`Google Drive error ${r.status}${detail ? ': ' + detail : ''}`);
+  }
+  return r;
+}
+const q = s => encodeURIComponent(s);
+
+const realDrive = {
+  async meta(id) {
+    return (await api(`${DRIVE}/${id}?fields=id,name,version,modifiedTime,parents,trashed`)).json();
+  },
+  async locate() {
+    const cached = lsGet('gino_file_id');
+    if (cached) {
+      try { const m = await this.meta(cached); if (!m.trashed && m.name === FILE_NAME) return m; }
+      catch (e) { if (e instanceof NeedAuth) throw e; }
+    }
+    const folders = (await (await api(`${DRIVE}?q=${q(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`)}&fields=files(id)&pageSize=20`)).json()).files || [];
+    let found = [];
+    for (const f of folders) {
+      const files = (await (await api(`${DRIVE}?q=${q(`name='${FILE_NAME}' and '${f.id}' in parents and trashed=false`)}&fields=files(id,name,version,modifiedTime,parents,trashed)`)).json()).files || [];
+      found = found.concat(files);
+    }
+    if (!found.length) throw new Error(`Couldn't find ${FOLDER_NAME}/${FILE_NAME} in your Google Drive. Check you signed in with the same Google account your Mac uses.`);
+    found.sort((a, b) => (a.modifiedTime < b.modifiedTime ? 1 : -1));
+    lsSet('gino_file_id', found[0].id);
+    return found[0];
+  },
+  async read(id) { return (await api(`${DRIVE}/${id}?alt=media`)).text(); },
+  async write(id, text) {
+    return (await api(`${UPLOAD}/${id}?uploadType=media&fields=id,version,modifiedTime`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: text,
+    })).json();
+  },
+  async backup(parentId, text) {
+    // Same as the Mac app: keep the previous version as cases_backup.json.
+    if (!parentId) return;
+    const files = (await (await api(`${DRIVE}?q=${q(`name='${BACKUP_NAME}' and '${parentId}' in parents and trashed=false`)}&fields=files(id)`)).json()).files || [];
+    if (files.length) { await this.write(files[0].id, text); return; }
+    const boundary = 'gino' + hex(8);
+    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+      JSON.stringify({ name: BACKUP_NAME, parents: [parentId], mimeType: 'application/json' }) +
+      `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${text}\r\n--${boundary}--`;
+    await api(`${UPLOAD}?uploadType=multipart&fields=id`, { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+  },
+};
+
+/* Demo mode (?demo=1): fake Drive in this tab only, with made-up cases. */
+const mockDrive = {
+  _get() { const raw = sessionStorage.getItem('gino_mock'); return raw ? JSON.parse(raw) : null; },
+  _put(f) { sessionStorage.setItem('gino_mock', JSON.stringify(f)); },
+  _ensure() { let f = this._get(); if (!f) { f = { id: 'demo-file', version: '1', text: JSON.stringify(sampleData(), null, 2), backup: null }; this._put(f); } return f; },
+  async meta() { const f = this._ensure(); return { id: f.id, name: FILE_NAME, version: f.version, parents: ['demo-folder'], trashed: false }; },
+  async locate() { return this.meta(); },
+  async read() { return this._ensure().text; },
+  async write(id, text) { const f = this._ensure(); f.text = text; f.version = String(Number(f.version) + 1); this._put(f); return { id, version: f.version }; },
+  async backup(parentId, text) { const f = this._ensure(); f.backup = text; this._put(f); },
+};
+// For testing: simulate the Mac changing the file behind this page's back.
+window.__demoExternalEdit = (fn) => { const f = mockDrive._ensure(); const d = JSON.parse(f.text); fn(d); f.text = JSON.stringify(d, null, 2); f.version = String(Number(f.version) + 1); mockDrive._put(f); };
+window.__demoFile = () => mockDrive._ensure();
+
+const drive = DEMO ? mockDrive : realDrive;
+
+/* ------------------------------------------------------------------ */
+/* State                                                               */
+/* ------------------------------------------------------------------ */
+const S = {
+  token: null, tokenExp: 0, gisReady: false,
+  data: null, loadedText: null, fileId: null, parentId: null, version: null, loadedAt: null,
+  busy: false, needAuth: false, pendingRetry: null, fatal: null,
+  tab: 'milestones', open: new Set(),
+  selectedId: '', draft: null, dirty: false, delConfirm: false,
+  calc: { ref: today(), days: 7, label: '' }, calcMsg: null,
+  add: freshAdd(), addError: '',
+  toast: null,
+};
+function freshAdd() {
+  return { case_name: '', firm_reference: '', court_number: '', case_type: 'Personal Injury', status: 'Active', case_description: '', accrual: '', limitation: '', extra: true };
+}
+const settings = () => S.data.settings;
+
+/* ------------------------------------------------------------------ */
+/* Sign-in                                                             */
+/* ------------------------------------------------------------------ */
+let tokenClient = null;
+function initGis() {
+  if (DEMO || !CLIENT_ID) return;
+  if (!(window.google && google.accounts && google.accounts.oauth2)) { setTimeout(initGis, 150); return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE,
+    callback: onToken,
+    error_callback: (err) => { toast('warning', 'Google sign-in was cancelled or blocked' + (err && err.type ? ` (${err.type})` : '') + '. Tap the sign-in button to try again.'); },
+  });
+  S.gisReady = true;
+  render();
+}
+function signIn() {
+  // Must run directly inside a tap, or Safari blocks the Google pop-up.
+  if (!tokenClient) { toast('warning', 'Google sign-in is still loading - try again in a second.'); return; }
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+async function onToken(resp) {
+  if (resp.error) { toast('error', 'Google sign-in failed: ' + resp.error); return; }
+  S.token = resp.access_token;
+  S.tokenExp = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+  S.needAuth = false;
+  lsSet('gino_signed_in_before', '1');
+  const retry = S.pendingRetry; S.pendingRetry = null;
+  if (retry) await retry(); else if (!S.data) await loadFromDrive();
+  render();
+}
+function signOut() {
+  if (S.dirty && !confirm('You have unsaved changes. Sign out anyway and lose them?')) return;
+  if (S.token && window.google) google.accounts.oauth2.revoke(S.token, () => {});
+  Object.assign(S, { token: null, tokenExp: 0, data: null, loadedText: null, fileId: null, version: null, draft: null, dirty: false, selectedId: '', needAuth: false });
+  lsDel('gino_file_id');
+  render();
+}
+
+/* ------------------------------------------------------------------ */
+/* Load / save                                                         */
+/* ------------------------------------------------------------------ */
+function setBusy(on, text) {
+  S.busy = on;
+  document.getElementById('busyHost').innerHTML = on ? `<div class="busy">${esc(text || 'Working...')}</div>` : '';
+  document.querySelectorAll('button').forEach(b => { if (on) b.dataset.wasDisabled = b.disabled ? '1' : ''; b.disabled = on ? true : b.dataset.wasDisabled === '1'; });
+}
+function handleError(e, retry) {
+  if (e instanceof NeedAuth) {
+    S.needAuth = true; S.pendingRetry = retry || null;
+    render();
+    return;
+  }
+  console.error(e);
+  toast('error', e.message || String(e));
+}
+async function loadFromDrive() {
+  setBusy(true, 'Loading from Google Drive...');
+  try {
+    const m = await drive.locate();
+    const text = await drive.read(m.id);
+    let parsed;
+    try { parsed = JSON.parse(text); } catch (e) { throw new Error(`${FILE_NAME} in Google Drive couldn't be read (it isn't valid data). Nothing was changed.`); }
+    S.data = normalize(parsed);
+    S.loadedText = text; S.fileId = m.id; S.parentId = (m.parents || [])[0] || null; S.version = m.version; S.loadedAt = new Date();
+    S.fatal = null;
+    if (S.selectedId && !S.data.cases.find(c => c.id === S.selectedId)) { S.selectedId = ''; S.draft = null; S.dirty = false; }
+    if (S.selectedId && !S.dirty) S.draft = clone(S.data.cases.find(c => c.id === S.selectedId));
+  } catch (e) {
+    if (!(e instanceof NeedAuth)) S.fatal = e.message;
+    handleError(e, loadFromDrive);
+  } finally { setBusy(false); render(); }
+}
+function reload() {
+  if (S.dirty && !confirm('Reloading will discard your unsaved changes to this case. Continue?')) return;
+  S.dirty = false; S.draft = null;
+  if (S.selectedId) S.draft = null;
+  loadFromDrive().then(() => toast('success', 'Loaded the latest data from Google Drive.'));
+}
+
+/*
+ * Every change is a small "mutation" applied to the newest copy of the file.
+ * If the Mac changed cases.json since this page loaded it, the change is
+ * re-applied on top of the Mac's version instead of overwriting it.
+ */
+async function commit(mutate, okMsg) {
+  if (S.busy) return false;
+  setBusy(true, 'Saving to Google Drive...');
+  let note = '';
+  try {
+    let meta = null;
+    try { meta = await drive.meta(S.fileId); } catch (e) { if (e instanceof NeedAuth) throw e; }
+    let base = S.data, baseText = S.loadedText;
+    if (!meta || meta.trashed || meta.version !== S.version) {
+      const m2 = (!meta || meta.trashed) ? await drive.locate() : meta;
+      const latest = await drive.read(m2.id);
+      if (latest !== S.loadedText) {
+        base = normalize(JSON.parse(latest)); baseText = latest;
+        note = ' The file had also been changed on another device, so your change was added on top of that latest version.';
+      }
+      S.fileId = m2.id; S.parentId = (m2.parents || [])[0] || S.parentId; S.version = m2.version;
+    }
+    const next = clone(base);
+    const extra = mutate(next) || '';
+    const text = JSON.stringify(next, null, 2);
+    await drive.backup(S.parentId, baseText);
+    const res = await drive.write(S.fileId, text);
+    S.data = next; S.loadedText = text; S.version = res.version; S.loadedAt = new Date();
+    toast('success', okMsg + note + extra);
+    return true;
+  } catch (e) {
+    handleError(e, () => commit(mutate, okMsg));
+    return false;
+  } finally { setBusy(false); render(); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Actions                                                             */
+/* ------------------------------------------------------------------ */
+function cleanCase(d) {
+  const c = clone(d);
+  c.case_name = (c.case_name || '').trim() || (S.data.cases.find(x => x.id === c.id) || {}).case_name || 'Untitled case';
+  for (const k of ['firm_reference', 'case_reference', 'case_description', 'case_type']) c[k] = (c[k] || '').trim();
+  c.milestones = c.milestones.filter(m => (m.label || '').trim()).map(m => ({ ...m, id: m.id || newMilestoneId(), label: m.label.trim(), date: parseDate(m.date), done: !!m.done, notes: m.notes || '' }));
+  c.updates = c.updates.filter(u => (u.text || '').trim()).map(u => ({ ...u, id: u.id || newUpdateId(), date: parseDate(u.date), text: u.text.trim() }));
+  c.updates.sort((a, b) => ((a.date || '') < (b.date || '') ? 1 : (a.date || '') > (b.date || '') ? -1 : 0));
+  c.correspondence = c.correspondence.filter(f => (f.description || '').trim()).map(f => ({
+    ...f, id: f.id || newCorrId(), date_sent: parseDate(f.date_sent), description: f.description.trim(), date: parseDate(f.date),
+    done: !!f.done, visible: isVisible(f), notes: f.notes || '',
+  }));
+  c.updated_at = nowStamp();
+  return c;
+}
+async function saveDraft() {
+  if (!S.draft) return;
+  const saved = cleanCase(S.draft);
+  const ok = await commit(data => {
+    const i = data.cases.findIndex(c => c.id === saved.id);
+    if (i >= 0) { data.cases[i] = saved; return ''; }
+    data.cases.push(saved);
+    return ' (This case had been deleted on another device, so it was added back.)';
+  }, 'Saved changes to this case.');
+  if (ok) { S.draft = clone(S.data.cases.find(c => c.id === saved.id)); S.dirty = false; render(); }
+}
+async function deleteSelected() {
+  const id = S.selectedId;
+  const ok = await commit(data => { data.cases = data.cases.filter(c => c.id !== id); }, 'Case deleted.');
+  if (ok) { S.selectedId = ''; S.draft = null; S.dirty = false; S.delConfirm = false; render(); }
+}
+async function addCase() {
+  const a = S.add;
+  if (!a.case_name.trim()) { S.addError = 'Case name is required.'; render(); return; }
+  S.addError = '';
+  const now = nowStamp();
+  const milestones = [];
+  if (a.accrual) milestones.push({ id: newMilestoneId(), label: 'Date of Accrual', date: a.accrual, done: true, notes: '' });
+  if (a.accrual && a.limitation) milestones.push({ id: newMilestoneId(), label: 'Limitation Date', date: a.limitation, done: false, notes: 'Calculated as 3 years from date of accrual - verify for this cause of action' });
+  if (a.extra) for (const label of TEMPLATE) milestones.push({ id: newMilestoneId(), label, date: null, done: false, notes: '' });
+  const nc = {
+    id: newCaseId(), case_name: a.case_name.trim(), case_reference: a.court_number.trim(), firm_reference: a.firm_reference.trim(),
+    case_type: a.case_type.trim(), status: a.status, case_description: a.case_description.trim(), notes: '',
+    milestones, updates: [], correspondence: [], created_at: now, updated_at: now,
+  };
+  const ok = await commit(data => { data.cases.push(nc); }, `Added "${nc.case_name}".`);
+  if (ok) { S.add = freshAdd(); render(); }
+}
+async function saveSettings() {
+  const md = parseInt(document.getElementById('set_md').value, 10);
+  const fd = parseInt(document.getElementById('set_fd').value, 10);
+  if (!(md >= 1 && md <= 180 && fd >= 1 && fd <= 180)) { toast('error', 'Reminder days must be between 1 and 180.'); return; }
+  await commit(data => { data.settings.milestone_reminder_days = md; data.settings.followup_reminder_days = fd; }, 'Reminder settings saved.');
+}
+function selectCase(id) {
+  if (S.dirty && !confirm('You have unsaved changes to this case. Discard them?')) { render(); return; }
+  S.selectedId = id; S.dirty = false; S.delConfirm = false; S.calcMsg = null;
+  S.calc = { ref: today(), days: 7, label: '' };
+  const c = S.data.cases.find(x => x.id === id);
+  S.draft = c ? clone(c) : null;
+  render();
+}
+function calcAdd() {
+  const label = (S.calc.label || '').trim();
+  const days = parseInt(S.calc.days, 10);
+  if (!label) { S.calcMsg = { kind: 'error', text: 'Enter a label for this milestone before adding it.' }; render(); return; }
+  if (!parseDate(S.calc.ref)) { S.calcMsg = { kind: 'error', text: 'Pick a reference date first.' }; render(); return; }
+  if (!(days >= 1 && days <= 365)) { S.calcMsg = { kind: 'error', text: 'Number of days must be between 1 and 365.' }; render(); return; }
+  const due = addDays(S.calc.ref, days);
+  S.draft.milestones.push({ id: newMilestoneId(), label, date: due, done: false, notes: `Auto-calculated: ${S.calc.ref} + ${days} days - please verify.` });
+  S.dirty = true;
+  S.calc.label = '';
+  S.calcMsg = { kind: 'success', text: `Added '${label}' due ${due} to the milestone list below - review it there, then tap Save Changes to keep it.` };
+  render();
+}
+
+/* ------------------------------------------------------------------ */
+/* Excel export - Case Overview sheet, same layout as the Mac export   */
+/* ------------------------------------------------------------------ */
+async function exportExcel() {
+  if (!window.ExcelJS) { toast('warning', 'The Excel tool is still loading - try again in a moment.'); return; }
+  const th = settings().milestone_reminder_days;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Case Overview');
+  const headers = ['Type', 'Firm Ref', 'Case Name', 'Description', 'Court Number', 'Milestone', 'Next Follow-up', 'Status'];
+  ws.addRow(headers);
+  ws.getRow(1).eachCell(c => { c.font = { bold: true }; });
+  const all = [headers];
+  for (const c of S.data.cases) {
+    const entries = milestoneEntries(c);
+    const lines = [];
+    for (let i = 0; i < entries.length; i += 2) lines.push(entries.slice(i, i + 2).join(' | '));
+    const msText = entries.length ? lines.join('\n') : 'No milestones set';
+    const values = [c.case_type, c.firm_reference || '', c.case_name, c.case_description || '', c.case_reference, msText, nextFollowupSummary(c) || 'No follow-ups pending', c.status];
+    all.push(values);
+    const row = ws.addRow(values);
+    const argb = 'FF' + COLORS[caseUrgency(c, th)].slice(1).toUpperCase();
+    for (let col = 1; col <= headers.length; col++) row.getCell(col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb }, bgColor: { argb } };
+    row.getCell(4).alignment = { wrapText: true, vertical: 'top' };
+    row.getCell(6).alignment = { wrapText: true, vertical: 'top' };
+    row.height = Math.max(15, (msText.split('\n').length) * 15);
+  }
+  headers.forEach((_, i) => {
+    const len = Math.max(...all.map(r => String(r[i] == null ? '' : r[i]).length));
+    ws.getColumn(i + 1).width = Math.min(Math.max(len + 2, 10), 45);
+  });
+  ws.getColumn(4).width = 45;
+  ws.getColumn(6).width = 55;
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `case_tracker_export_${today()}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+/* ------------------------------------------------------------------ */
+/* Rendering                                                           */
+/* ------------------------------------------------------------------ */
+function toast(kind, text) {
+  S.toast = { kind, text, at: Date.now() };
+  const host = document.getElementById('toastHost');
+  host.innerHTML = `<div class="alert ${kind} toast" role="status">${esc(text)}</div>`;
+  const at = S.toast.at;
+  setTimeout(() => { if (S.toast && S.toast.at === at) { host.innerHTML = ''; S.toast = null; } }, kind === 'error' ? 9000 : 5000);
+}
+function det(id, title, inner, defaultOpen = false) {
+  const open = S.open.has(id) || (defaultOpen && !S.open.has('!' + id));
+  return `<details data-det="${id}" data-default="${defaultOpen ? 1 : 0}" ${open ? 'open' : ''}><summary>${title}</summary><div class="inner">${inner}</div></details>`;
+}
+function alertBox(kind, html) { return `<div class="alert ${kind}">${html}</div>`; }
+
+function renderSignIn() {
+  if (!CLIENT_ID) {
+    return `<h1>⚖️ Case Tracker</h1>${alertBox('info', 'This page isn\'t connected to Google yet: the Google Client ID still needs to be added to <code>config.js</code>. See the setup guide. You can preview the app with made-up cases by adding <code>?demo=1</code> to the address.')}`;
+  }
+  const again = lsGet('gino_signed_in_before');
+  return `<h1>⚖️ Case Tracker</h1>
+    <p class="caption">Opens your <b>${FOLDER_NAME}/${FILE_NAME}</b> from Google Drive. Nothing is stored on this iPad; your cases stay in Google Drive.</p>
+    ${S.fatal ? alertBox('error', esc(S.fatal)) : ''}
+    <div class="row-btns"><button class="primary" data-act="signin" ${S.gisReady ? '' : 'disabled'}>${again ? 'Sign in with Google' : 'Sign in with Google to open your cases'}</button></div>
+    ${S.gisReady ? '' : '<p class="caption">Loading Google sign-in...</p>'}`;
+}
+
+function renderHeader() {
+  const when = S.loadedAt ? S.loadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+  return `<div class="topbar"><h1>⚖️ Case Tracker</h1>
+      <div class="row-btns"><button data-act="reload">🔄 Reload</button>${DEMO ? '' : '<button data-act="signout">Sign out</button>'}</div></div>
+    <div class="status-line">${DEMO ? '<b>DEMO MODE</b> - made-up cases, nothing is saved to Google Drive. ' : ''}${esc(FOLDER_NAME + '/' + FILE_NAME)} · ${S.data.cases.length} case(s) · last loaded ${esc(when)}</div>
+    ${S.needAuth ? alertBox('warning', `Your Google sign-in has expired (it lasts about an hour). Any unsaved changes are kept. <div class="row-btns"><button class="primary" data-act="signin">Reconnect to Google</button></div>`) : ''}`;
+}
+
+function renderSettings() {
+  const s = settings();
+  return det('settings', '⚙️ Settings', `
+    <p class="caption">Reminder windows - set separately for milestones (court-imposed) and follow-ups (your own internal deadlines).</p>
+    <div class="grid2">
+      <div><label for="set_md">Milestones - remind me this many days before</label><input type="number" id="set_md" min="1" max="180" value="${esc(s.milestone_reminder_days)}"></div>
+      <div><label for="set_fd">Follow-ups - remind me this many days before</label><input type="number" id="set_fd" min="1" max="180" value="${esc(s.followup_reminder_days)}"></div>
+    </div>
+    <div class="row-btns"><button data-act="save-settings">Save Reminder Settings</button></div>`);
+}
+
+function statusTable(rows, col) {
+  return `<div class="table-scroll"><table><thead><tr><th>Case Name</th><th>${esc(col)}</th></tr></thead><tbody>${
+    rows.map(r => `<tr style="background:${COLORS[r.status]}"><td class="mid">${esc(r.name)}</td><td class="wide">${esc(r.value)}</td></tr>`).join('')
+  }</tbody></table></div>`;
+}
+
+function renderFocus() {
+  const md = settings().milestone_reminder_days, fd = settings().followup_reminder_days;
+  let body = '';
+  if (S.tab === 'milestones') {
+    const al = milestoneAlerts(S.data, md);
+    const over = al.filter(a => a.status === 'overdue'), soon = al.filter(a => a.status === 'due_soon');
+    if (over.length) body += alertBox('error', `<b>${over.length} OVERDUE</b><ul>${over.map(a => `<li><b>${esc(a.case_name)}</b> (${esc(a.case_reference)}): ${esc(a.label)} was due ${esc(a.date)}</li>`).join('')}</ul>`);
+    if (soon.length) body += alertBox('warning', `<b>${soon.length} due within ${md} days</b><ul>${soon.map(a => `<li><b>${esc(a.case_name)}</b> (${esc(a.case_reference)}): ${esc(a.label)} due ${esc(a.date)}</li>`).join('')}</ul>`);
+    if (!over.length && !soon.length) body += alertBox('success', 'No milestone deadlines within the reminder window.');
+    if (S.data.cases.length) {
+      const rows = S.data.cases.map(c => { const n = caseNextMilestone(c); return { name: c.case_name, value: n ? `${n.label}: ${n.date}` : 'None pending', status: n ? milestoneStatus(n, md) : 'none' }; });
+      body += det('focus_ms_table', '📋 View all cases - Upcoming Milestones', statusTable(rows, 'Upcoming Milestone'));
+    }
+  } else {
+    const al = followupAlerts(S.data, fd);
+    const over = al.filter(a => a.status === 'overdue'), soon = al.filter(a => a.status === 'due_soon');
+    if (over.length) body += alertBox('error', `<b>${over.length} OVERDUE</b><ul>${over.map(a => `<li><b>${esc(a.case_name)}</b> (${esc(a.case_reference)}): "${esc(a.description)}" - was due ${esc(a.date)}, time to follow up</li>`).join('')}</ul>`);
+    if (soon.length) body += alertBox('warning', `<b>${soon.length} due within ${fd} days</b><ul>${soon.map(a => `<li><b>${esc(a.case_name)}</b> (${esc(a.case_reference)}): "${esc(a.description)}" - due ${esc(a.date)}</li>`).join('')}</ul>`);
+    if (!over.length && !soon.length) body += alertBox('success', 'No follow-ups within the reminder window.');
+    if (S.data.cases.length) {
+      const rows = S.data.cases.map(c => { const n = caseNextFollowup(c); return { name: c.case_name, value: n ? `${n.description}: ${n.date}` : 'None pending', status: n ? milestoneStatus(n, fd) : 'none' }; });
+      body += det('focus_fu_table', '📋 View all cases - Next Follow-ups', statusTable(rows, 'Next Follow-up'));
+    }
+  }
+  return `<h2>🎯 Focus</h2>
+    <div class="tabs"><button class="${S.tab === 'milestones' ? 'active' : ''}" data-act="tab" data-tab="milestones">📅 Milestones</button><button class="${S.tab === 'followups' ? 'active' : ''}" data-act="tab" data-tab="followups">🔔 Follow-ups</button></div>
+    ${body}`;
+}
+
+function renderOverview() {
+  let inner;
+  if (!S.data.cases.length) inner = alertBox('info', 'No cases yet. Add one below.');
+  else {
+    const th = settings().milestone_reminder_days;
+    inner = `<div class="table-scroll"><table><thead><tr><th></th><th>Type</th><th>Firm Ref</th><th>Case Name</th><th>Description</th><th>Court Number</th><th>Milestone</th><th>Next Follow-up</th><th>Status</th></tr></thead><tbody>${
+      S.data.cases.map((c, i) => {
+        const ms = milestoneEntries(c);
+        return `<tr style="background:${COLORS[caseUrgency(c, th)]}"><td>${i + 1}</td><td>${esc(c.case_type)}</td><td>${esc(c.firm_reference)}</td><td class="mid">${esc(c.case_name)}</td><td class="wide">${esc(c.case_description)}</td><td>${esc(c.case_reference)}</td><td class="wide">${esc(ms.length ? ms.join(' | ') : 'No milestones set')}</td><td class="mid">${esc(nextFollowupSummary(c) || 'No follow-ups pending')}</td><td>${esc(c.status)}</td></tr>`;
+      }).join('')
+    }</tbody></table></div>`;
+  }
+  return `<h2>📋 Case Overview</h2>${det('overview', '📋 View Case Overview table', inner)}
+    <div class="row-btns"><button data-act="export">📤 Export to Excel</button></div>
+    <p class="caption">Exports the Case Overview sheet (what your supervisor sees). On iPad it is saved to your Downloads in the Files app.</p>`;
+}
+
+function itemField(list, i, field, type, label, value, extra = '') {
+  const id = `f_${list}_${i}_${field}`;
+  if (type === 'checkbox') return `<label class="check"><input type="checkbox" id="${id}" data-list="${list}" data-idx="${i}" data-field="${field}" ${value ? 'checked' : ''}> ${label}</label>`;
+  return `<div><label for="${id}">${label}</label><input type="${type}" id="${id}" data-list="${list}" data-idx="${i}" data-field="${field}" value="${esc(value || '')}" ${extra}></div>`;
+}
+
+function renderMilestoneEditor(d) {
+  const items = d.milestones.map((m, i) => `<div class="item"><div class="item-grid ms">
+      ${itemField('milestones', i, 'label', 'text', 'Milestone', m.label)}
+      ${itemField('milestones', i, 'date', 'date', 'Date', parseDate(m.date))}
+      ${itemField('milestones', i, 'done', 'checkbox', 'Done', m.done)}
+    </div>
+    ${itemField('milestones', i, 'notes', 'text', 'Notes', m.notes)}
+    <div class="item-foot"><span></span><button class="link" data-act="del-item" data-list="milestones" data-idx="${i}">🗑️ Remove this milestone</button></div></div>`).join('');
+  return `<h3>Key dates / milestones</h3>
+    <p class="caption">Tick 'done' for anything already in the past (e.g. date of accrual, a letter that was sent) so it doesn't get flagged as overdue - leave it unticked only for a real, still-pending deadline.</p>
+    ${items || '<p class="muted">No milestones yet.</p>'}
+    <button class="small" data-act="add-item" data-list="milestones">＋ Add milestone</button>`;
+}
+function renderUpdatesEditor(d) {
+  const items = d.updates.map((u, i) => `<div class="item"><div class="item-grid up">
+      ${itemField('updates', i, 'date', 'date', 'Date', parseDate(u.date))}
+      <div><label for="f_updates_${i}_text">Update</label><textarea id="f_updates_${i}_text" data-list="updates" data-idx="${i}" data-field="text" rows="2">${esc(u.text)}</textarea></div>
+    </div><div class="item-foot"><span></span><button class="link" data-act="del-item" data-list="updates" data-idx="${i}">🗑️ Remove this update</button></div></div>`).join('');
+  return `<h3>Case updates / progress log</h3>
+    <p class="caption">A running log of what's happened on this case - add a dated entry any time. Newest entries are shown first after saving.</p>
+    <button class="small" data-act="add-item" data-list="updates">＋ Add update</button>
+    ${items || '<p class="muted">No updates logged.</p>'}`;
+}
+function renderFollowupEditor(d) {
+  const items = d.correspondence.map((f, i) => `<div class="item"><div class="item-grid fu">
+      ${itemField('correspondence', i, 'date_sent', 'date', 'Date Sent (optional)', parseDate(f.date_sent))}
+      ${itemField('correspondence', i, 'description', 'text', 'Task / Description', f.description)}
+      ${itemField('correspondence', i, 'date', 'date', 'Due Date', parseDate(f.date))}
+    </div>
+    ${itemField('correspondence', i, 'notes', 'text', 'Notes', f.notes)}
+    <div class="item-foot"><div style="display:flex;gap:18px">${itemField('correspondence', i, 'done', 'checkbox', 'Done', f.done)}${itemField('correspondence', i, 'visible', 'checkbox', 'Visible', isVisible(f))}</div>
+      <button class="link" data-act="del-item" data-list="correspondence" data-idx="${i}">🗑️ Remove this follow-up</button></div></div>`).join('');
+  return `<h3>Follow-ups</h3>
+    <p class="caption">Your own internal deadlines - not court-imposed, but things you need to stay on top of: replying to a letter, chasing a call, following up with a client, etc. Tick 'Done' once handled. Untick 'Visible' to keep an entry in your own record without it appearing in Focus or the Excel export.</p>
+    ${items || '<p class="muted">No follow-ups yet.</p>'}
+    <button class="small" data-act="add-item" data-list="correspondence">＋ Add follow-up</button>`;
+}
+
+function renderManage() {
+  let html = `<h2>✏️ Manage / Edit Case</h2><p class="caption">Update details, milestones, updates, or follow-ups for a case you've already added.</p>`;
+  if (!S.data.cases.length) return html;
+  html += `<label for="sel_case">Select a case</label><select id="sel_case" data-act-change="select-case">
+    <option value="">-- Please select --</option>
+    ${byFirmRef(S.data.cases).map(c => `<option value="${esc(c.id)}" ${c.id === S.selectedId ? 'selected' : ''}>${esc(caseLabel(c))}</option>`).join('')}</select>`;
+  const d = S.draft;
+  if (!S.selectedId || !d) return html;
+  const calcMsg = S.calcMsg ? alertBox(S.calcMsg.kind, esc(S.calcMsg.text)) : '';
+  html += det('calc', '🧮 Calculate a deadline', `
+    <p class="caption">Many procedural deadlines are set as a number of days (often a multiple of 7) from an order or another event. This adds a suggested milestone to the list below - review it there before tapping Save Changes.</p>
+    <div class="grid2">
+      <div><label for="calc_ref">Reference date (date of order / event)</label><input type="date" id="calc_ref" data-bind="calc.ref" value="${esc(S.calc.ref)}"></div>
+      <div><label for="calc_days">Number of days after reference date</label><input type="number" id="calc_days" data-bind="calc.days" min="1" max="365" step="7" value="${esc(S.calc.days)}"></div>
+    </div>
+    <label for="calc_label">Milestone label</label><input type="text" id="calc_label" data-bind="calc.label" placeholder="e.g. Comply with Order for Discovery" value="${esc(S.calc.label)}">
+    ${calcMsg}
+    <div class="row-btns"><button data-act="calc-add">Calculate &amp; Add to Milestones</button></div>`, true);
+  html += `
+    <label for="d_name">Case name</label><input type="text" id="d_name" data-bind="draft.case_name" value="${esc(d.case_name)}">
+    <div class="grid2">
+      <div><label for="d_firm">Firm reference / matter no.</label><input type="text" id="d_firm" data-bind="draft.firm_reference" value="${esc(d.firm_reference)}"></div>
+      <div><label for="d_court">Court number (if any)</label><input type="text" id="d_court" data-bind="draft.case_reference" value="${esc(d.case_reference)}"></div>
+      <div><label for="d_type">Case type</label><input type="text" id="d_type" data-bind="draft.case_type" value="${esc(d.case_type)}"></div>
+      <div><label for="d_status">Status</label><select id="d_status" data-bind="draft.status">${STATUSES.map(s => `<option ${s === d.status ? 'selected' : ''}>${s}</option>`).join('')}${STATUSES.includes(d.status) ? '' : `<option selected>${esc(d.status)}</option>`}</select></div>
+    </div>
+    <label for="d_desc">Case description (optional)</label><textarea id="d_desc" data-bind="draft.case_description">${esc(d.case_description)}</textarea>
+    <label for="d_notes">Notes</label><textarea id="d_notes" data-bind="draft.notes">${esc(d.notes)}</textarea>
+    ${renderMilestoneEditor(d)}
+    ${renderUpdatesEditor(d)}
+    ${renderFollowupEditor(d)}
+    <div class="row-btns"><button class="primary" data-act="save-draft">Save Changes</button>${S.dirty ? '<button data-act="discard-draft">Discard changes</button>' : ''}</div>
+    ${det('delete_case', '🗑️ Delete this case', `
+      <label class="check"><input type="checkbox" id="del_confirm" data-bind="delConfirm" ${S.delConfirm ? 'checked' : ''}> I understand this permanently deletes this case from the tracker.</label>
+      <button data-act="delete-case" ${S.delConfirm ? '' : 'disabled'}>Delete Case</button>`)}`;
+  return html;
+}
+
+function renderAdd() {
+  const a = S.add;
+  let lim = '';
+  if (a.accrual) {
+    lim = `<p class="caption">Suggested limitation date: accrual date + ${PI_LIMITATION_YEARS} years (standard HK personal injury limitation). Review and adjust if this cause of action has a different limitation period.</p>
+      <label for="a_lim">Limitation date</label><input type="date" id="a_lim" data-bind="add.limitation" value="${esc(a.limitation)}">`;
+  }
+  return det('add_case', '➕ Add New Case', `
+    <p class="caption">Create a brand-new case from scratch.</p>
+    <b>Case details</b>
+    <div class="grid2">
+      <div><label for="a_name">Case name (e.g. 'Chan Tai Man v. XYZ Ltd')</label><input type="text" id="a_name" data-bind="add.case_name" value="${esc(a.case_name)}"></div>
+      <div><label for="a_type">Case type</label><input type="text" id="a_type" data-bind="add.case_type" value="${esc(a.case_type)}"></div>
+      <div><label for="a_firm">Firm reference / matter no.</label><input type="text" id="a_firm" data-bind="add.firm_reference" value="${esc(a.firm_reference)}"></div>
+      <div><label for="a_status">Status</label><select id="a_status" data-bind="add.status">${STATUSES.map(s => `<option ${s === a.status ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div><label for="a_court">Court number (if any)</label><input type="text" id="a_court" data-bind="add.court_number" value="${esc(a.court_number)}"></div>
+    </div>
+    <label for="a_desc">Case description (optional)</label><textarea id="a_desc" data-bind="add.case_description">${esc(a.case_description)}</textarea>
+    <p style="margin-top:16px"><b>Key dates</b></p>
+    <label for="a_acc">Date of accrual (optional) - date of accident for PI, date of breach for contract claims, etc.</label>
+    <input type="date" id="a_acc" data-bind="add.accrual" data-rerender="1" value="${esc(a.accrual)}">
+    ${lim}
+    <p style="margin-top:16px"><b>Milestone template</b></p>
+    <label class="check"><input type="checkbox" data-bind="add.extra" ${a.extra ? 'checked' : ''}> Also add placeholder milestones for Letter Before Claim, Writ Filed, Discovery Deadline, Trial Date (dates left blank - fill in later)</label>
+    ${S.addError ? alertBox('error', esc(S.addError)) : ''}
+    <div class="row-btns"><button class="primary" data-act="add-case">Add Case</button></div>`);
+}
+
+function updateUnsavedBar() {
+  const bar = document.getElementById('unsavedBar');
+  bar.classList.toggle('show', !!(S.dirty && S.draft && S.data));
+  if (S.draft) document.getElementById('unsavedText').textContent = `Unsaved changes to "${S.draft.case_name || 'this case'}"`;
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if (!S.data) {
+    app.innerHTML = S.busy ? '<div class="center muted">Loading from Google Drive...</div>' : renderSignIn();
+  } else {
+    app.innerHTML = renderHeader() + renderSettings() + renderFocus() + '<hr>' + renderOverview() + '<hr>' + renderManage() + '<hr>' + renderAdd();
+  }
+  updateUnsavedBar();
+  if (S.busy) setBusy(true, document.querySelector('.busy') ? document.querySelector('.busy').textContent : '');
+}
+
+/* ------------------------------------------------------------------ */
+/* Events                                                              */
+/* ------------------------------------------------------------------ */
+function setByPath(path, value) {
+  const parts = path.split('.');
+  let o = S;
+  for (let i = 0; i < parts.length - 1; i++) o = o[parts[i]];
+  o[parts[parts.length - 1]] = value;
+}
+function onField(e) {
+  const el = e.target;
+  const value = el.type === 'checkbox' ? el.checked : el.value;
+  if (el.dataset.list && S.draft) {
+    S.draft[el.dataset.list][Number(el.dataset.idx)][el.dataset.field] = el.type === 'date' ? (value || null) : value;
+    S.dirty = true; updateUnsavedBar(); return;
+  }
+  const bind = el.dataset.bind;
+  if (!bind) return;
+  setByPath(bind, value);
+  if (bind.startsWith('draft.')) { S.dirty = true; updateUnsavedBar(); }
+  if (bind === 'add.accrual') { S.add.limitation = value ? addYears(value, PI_LIMITATION_YEARS) : ''; if (e.type === 'change') render(); }
+  if (bind === 'delConfirm') render();
+}
+document.addEventListener('input', onField);
+document.addEventListener('change', e => {
+  if (e.target.dataset.actChange === 'select-case') { selectCase(e.target.value); return; }
+  onField(e);
+});
+document.addEventListener('toggle', e => {
+  const el = e.target;
+  if (!el.dataset || !el.dataset.det) return;
+  const id = el.dataset.det;
+  if (el.dataset.default === '1') { if (el.open) S.open.delete('!' + id); else S.open.add('!' + id); }
+  else if (el.open) S.open.add(id); else S.open.delete(id);
+}, true);
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn || btn.disabled || btn.tagName === 'SELECT') return;
+  const act = btn.dataset.act;
+  if (act === 'signin') return signIn();
+  if (act === 'signout') return signOut();
+  if (act === 'reload') return reload();
+  if (act === 'tab') { S.tab = btn.dataset.tab; return render(); }
+  if (act === 'save-settings') return saveSettings();
+  if (act === 'export') return exportExcel().catch(err => toast('error', 'Excel export failed: ' + err.message));
+  if (act === 'save-draft') return saveDraft();
+  if (act === 'discard-draft') { if (confirm('Discard your unsaved changes to this case?')) { S.draft = clone(S.data.cases.find(c => c.id === S.selectedId)); S.dirty = false; render(); } return; }
+  if (act === 'delete-case') return deleteSelected();
+  if (act === 'add-case') return addCase();
+  if (act === 'calc-add') return calcAdd();
+  if (act === 'add-item') {
+    const list = btn.dataset.list;
+    if (list === 'milestones') S.draft.milestones.push({ id: newMilestoneId(), label: '', date: null, done: false, notes: '' });
+    if (list === 'updates') S.draft.updates.unshift({ id: newUpdateId(), date: today(), text: '' });
+    if (list === 'correspondence') S.draft.correspondence.push({ id: newCorrId(), date_sent: null, description: '', date: null, done: false, visible: true, notes: '' });
+    S.dirty = true; render();
+    const idx = list === 'updates' ? 0 : S.draft[list].length - 1;
+    const first = document.getElementById(`f_${list}_${idx}_${list === 'milestones' ? 'label' : list === 'updates' ? 'text' : 'description'}`);
+    if (first) first.focus();
+    return;
+  }
+  if (act === 'del-item') { S.draft[btn.dataset.list].splice(Number(btn.dataset.idx), 1); S.dirty = true; return render(); }
+});
+window.addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ------------------------------------------------------------------ */
+/* Demo data - fictional, same as seed_sample_data() on the Mac        */
+/* ------------------------------------------------------------------ */
+function sampleData() {
+  const t = today(), now = nowStamp();
+  const ms = (label, d, done = false, notes = '') => ({ id: newMilestoneId(), label, date: d, done, notes });
+  const upd = (d, text) => ({ id: newUpdateId(), date: d, text });
+  const corr = (sent, description, by, done = false, visible = true, notes = '') => ({ id: newCorrId(), date_sent: sent, description, date: by, done, visible, notes });
+  const kase = (case_name, firm, ref, milestones, extra = {}) => ({ id: newCaseId(), case_name, case_reference: ref, firm_reference: firm, case_type: 'Personal Injury', status: 'Active', case_description: '', notes: '', milestones, updates: [], correspondence: [], created_at: now, updated_at: now, ...extra });
+  const D = n => addDays(t, n);
+  return {
+    schema_version: 1,
+    settings: { milestone_reminder_days: 14, followup_reminder_days: 14 },
+    cases: [
+      kase('Chan Tai Man v. Wonderland Construction Co Ltd', 'P2024-0112', 'HCPI 45/2025',
+        [ms('Date of Accrual', D(-400), true), ms('Discovery / Directions Deadline', D(-5)), ms('Limitation Date', D(560))],
+        { updates: [upd(D(-20), 'Filed statement of claim.'), upd(D(-90), 'Initial client interview completed.')],
+          correspondence: [corr(D(-30), "Request for further and better particulars sent to defendant's solicitors", D(-2))],
+          case_description: 'Slip and fall at construction site due to unmarked wet floor. Client sustained a fractured wrist. Liability disputed by defendant.' }),
+      kase('Lee Siu Fung v. Golden Harbour Logistics Ltd', 'P2025-0034', 'HCPI 12/2026',
+        [ms('Date of Accrual', D(-200), true), ms('Writ / Statement of Claim Filed', D(10)), ms('Limitation Date', D(900))],
+        { updates: [upd(D(-15), 'Sent letter before claim to defendant.')],
+          correspondence: [corr(D(-15), 'Letter before claim sent to defendant', D(6)), corr(D(-60), 'Request for medical records sent to hospital', D(-30), true, true, 'Records received.'), corr(D(-200), 'Initial call with client to discuss the accident', D(-200), true, false, 'Personal note only - not relevant for supervisor review.')],
+          case_description: "Rear-end collision at a red light. Defendant's insurer has admitted liability; case concerns quantum of damages only." }),
+      kase('Wong Ka Yee v. Silver Star Restaurant Ltd', 'P2025-0201', 'HCPI 88/2026',
+        [ms('Date of Accrual', D(-60), true), ms('Limitation Date', D(900)), ms('Trial / Hearing Date', null)],
+        { case_description: "Food poisoning incident at defendant's restaurant. Awaiting expert medical report." }),
+      kase('Ho Man Wai v. Everbright Property Management Ltd', 'P2022-0087', 'HCPI 03/2024',
+        [ms('Date of Accrual', D(-700), true), ms('Trial / Hearing Date', D(-30), true)],
+        { status: 'Closed', updates: [upd(D(-25), "Judgment handed down in client's favour. Case closed.")], case_description: 'Ceiling collapse in common area of residential building. Judgment obtained for client.' }),
+    ],
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Start                                                               */
+/* ------------------------------------------------------------------ */
+render();
+if (DEMO) loadFromDrive(); else initGis();
+</script>
+</body>
+</html>
